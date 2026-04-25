@@ -17,7 +17,8 @@
 - 支持外部浏览器打开、复制链接、刷新、最大化和关闭窗格
 - 内置 NMC 各高度层天气图入口
 - 内置速度转换和云图参考悬浮图
-![Uploading 544b76f5711d5f4b8b8f133f8479ca1f.png…]()
+<img width="1919" height="1079" alt="544b76f5711d5f4b8b8f133f8479ca1f" src="https://github.com/user-attachments/assets/ea4789c3-368f-4a09-9988-e058d269fb76" />
+
 
 ## 内置资源
 
