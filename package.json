@@ -1,6 +1,6 @@
 {
   "name": "jerrys-typhoon-workbench",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Jerry's Typhoon Workbench - personal typhoon tracking desktop workbench.",
   "main": "electron/main.cjs",
