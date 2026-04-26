@@ -226,7 +226,7 @@ export const defaultBookmarks: Bookmark[] = [
   {
     id: "nmc-chart-h000",
     title: "NMC 地面天气图",
-    url: "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h000.htm",
+    url: "internal://nmc-weather-charts?level=h000",
     category: "NMC天气图",
     refresh: true,
     pinned: true
@@ -234,14 +234,14 @@ export const defaultBookmarks: Bookmark[] = [
   {
     id: "nmc-chart-h925",
     title: "NMC 925hPa 天气图",
-    url: "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h925.htm",
+    url: "internal://nmc-weather-charts?level=h925",
     category: "NMC天气图",
     refresh: true
   },
   {
     id: "nmc-chart-h850",
     title: "NMC 850hPa 天气图",
-    url: "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h850.htm",
+    url: "internal://nmc-weather-charts?level=h850",
     category: "NMC天气图",
     refresh: true,
     pinned: true
@@ -249,14 +249,14 @@ export const defaultBookmarks: Bookmark[] = [
   {
     id: "nmc-chart-h700",
     title: "NMC 700hPa 天气图",
-    url: "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h700.htm",
+    url: "internal://nmc-weather-charts?level=h700",
     category: "NMC天气图",
     refresh: true
   },
   {
     id: "nmc-chart-h500",
     title: "NMC 500hPa 天气图",
-    url: "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h500.htm",
+    url: "internal://nmc-weather-charts?level=h500",
     category: "NMC天气图",
     refresh: true,
     pinned: true
@@ -264,7 +264,7 @@ export const defaultBookmarks: Bookmark[] = [
   {
     id: "nmc-chart-h200",
     title: "NMC 200hPa 天气图",
-    url: "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h200.htm",
+    url: "internal://nmc-weather-charts?level=h200",
     category: "NMC天气图",
     refresh: true,
     pinned: true
@@ -272,28 +272,7 @@ export const defaultBookmarks: Bookmark[] = [
   {
     id: "nmc-chart-h100",
     title: "NMC 100hPa 天气图",
-    url: "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h100.htm",
-    category: "NMC天气图",
-    refresh: true
-  },
-  {
-    id: "nmc-satellite-h000",
-    title: "NMC 地面叠加卫星云图",
-    url: "http://www.nmc.cn/publish/observations/china/dm/radar-h000.htm",
-    category: "NMC天气图",
-    refresh: true
-  },
-  {
-    id: "nmc-satellite-h850",
-    title: "NMC 850hPa 叠加卫星云图",
-    url: "http://www.nmc.cn/publish/observations/china/dm/radar-h850.htm",
-    category: "NMC天气图",
-    refresh: true
-  },
-  {
-    id: "nmc-satellite-h500",
-    title: "NMC 500hPa 叠加卫星云图",
-    url: "http://www.nmc.cn/publish/observations/china/dm/radar-h500.htm",
+    url: "internal://nmc-weather-charts?level=h100",
     category: "NMC天气图",
     refresh: true
   },

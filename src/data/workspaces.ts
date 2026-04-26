@@ -33,6 +33,12 @@ const paneFrom = (id: string, bookmark?: Bookmark): PaneState => {
   };
 };
 
+const internalPane = (id: string, title: string, url: string): PaneState => ({
+  id,
+  title,
+  url
+});
+
 export function buildDefaultWorkspaces(bookmarks: Bookmark[]): Workspace[] {
   const find = (id: string) => bookmarks.find((bookmark) => bookmark.id === id);
 
@@ -105,13 +111,13 @@ export function buildDefaultWorkspaces(bookmarks: Bookmark[]): Workspace[] {
     },
     {
       id: "nmc-weather-charts",
-      name: "NMC天气图",
-      layout: "four",
+      name: "NMC 天气图",
+      layout: "one",
       panes: [
-        paneFrom("pane-1", find("nmc-chart-h000")),
-        paneFrom("pane-2", find("nmc-chart-h850")),
-        paneFrom("pane-3", find("nmc-chart-h500")),
-        paneFrom("pane-4", find("nmc-chart-h200"))
+        internalPane("pane-1", "NMC 天气图工作台", "internal://nmc-weather-charts"),
+        emptyPane("pane-2"),
+        emptyPane("pane-3"),
+        emptyPane("pane-4")
       ]
     }
   ];

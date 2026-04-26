@@ -15,7 +15,9 @@ import {
   Square,
   Star,
   StarOff,
-  X
+  X,
+  ZoomIn,
+  ZoomOut
 } from "lucide-react";
 import { categories, defaultBookmarks, type Bookmark, type BookmarkCategory } from "./data/bookmarks";
 import { buildDefaultWorkspaces, type LayoutMode, type PaneState, type Workspace } from "./data/workspaces";
@@ -33,6 +35,16 @@ type WebviewElement = HTMLElement & {
 };
 
 const STORAGE_KEY = "jerrys-typhoon-workbench:v1";
+const internalNmcUrl = "internal://nmc-weather-charts";
+const nmcUrlMap: Record<string, string> = {
+  "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h000.htm": `${internalNmcUrl}?level=h000`,
+  "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h925.htm": `${internalNmcUrl}?level=h925`,
+  "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h850.htm": `${internalNmcUrl}?level=h850`,
+  "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h700.htm": `${internalNmcUrl}?level=h700`,
+  "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h500.htm": `${internalNmcUrl}?level=h500`,
+  "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h200.htm": `${internalNmcUrl}?level=h200`,
+  "http://www.nmc.cn/publish/observations/china/dm/weatherchart-h100.htm": `${internalNmcUrl}?level=h100`
+};
 const paneOrder = ["pane-1", "pane-2", "pane-3", "pane-4"];
 const refreshOptions = [0, 5, 10, 30, 60];
 const referenceImages = [
@@ -85,12 +97,15 @@ function getInitialState(): PersistedState {
 
   try {
     const parsed = { ...fallback, ...JSON.parse(raw) };
+    const normalizedWorkspaces = normalizeWorkspaces(parsed.workspaces);
+    const migratedWorkspace = normalizedWorkspaces.find((workspace) => workspace.id === parsed.workspaceId);
+    const shouldUseMigratedWorkspace = parsed.workspaceId === "nmc-weather-charts" && migratedWorkspace;
     return {
       ...parsed,
-      panes: normalizePanes(parsed.panes),
+      panes: shouldUseMigratedWorkspace ? migratedWorkspace.panes : normalizePanes(parsed.panes),
       customBookmarks: Array.isArray(parsed.customBookmarks) ? parsed.customBookmarks : [],
-      workspaces: normalizeWorkspaces(parsed.workspaces),
-      layout: normalizeLayout(parsed.layout),
+      workspaces: normalizedWorkspaces,
+      layout: shouldUseMigratedWorkspace ? migratedWorkspace.layout : normalizeLayout(parsed.layout),
       selectedPaneId: paneOrder.includes(parsed.selectedPaneId) ? parsed.selectedPaneId : "pane-1"
     };
   } catch {
@@ -111,6 +126,7 @@ function App() {
   const [workspaceEditor, setWorkspaceEditor] = useState<Workspace | null>(null);
   const [paneStatuses, setPaneStatuses] = useState<Record<string, "idle" | "loading" | "ready" | "failed">>({});
   const [referenceViewer, setReferenceViewer] = useState<{ title: string; url: string } | null>(null);
+  const [nmcRefreshToken, setNmcRefreshToken] = useState(0);
   const webviews = useRef(new Map<string, WebviewElement>());
 
   const bookmarks = useMemo(
@@ -412,6 +428,13 @@ function App() {
   }
 
   function refreshPane(paneId: string, ignoreCache = false) {
+    const pane = activePanes.find((item) => item.id === paneId);
+    if (isInternalNmcUrl(pane?.url)) {
+      setNmcRefreshToken(Date.now());
+      setLastRefresh(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
+      return;
+    }
+
     const webview = webviews.current.get(paneId);
     if (!webview) {
       return;
@@ -802,7 +825,9 @@ function App() {
               </div>
 
               <div className="pane-content">
-                {pane.url ? (
+                {isInternalNmcUrl(pane.url) ? (
+                  <NmcWeatherChartPanel paneUrl={pane.url} refreshToken={nmcRefreshToken} />
+                ) : pane.url ? (
                   <webview
                     className="site-webview"
                     ref={(node) => {
@@ -833,8 +858,8 @@ function App() {
                     <span>当前窗格会记住你打开的网站。</span>
                   </div>
                 )}
-                {pane.url && paneStatuses[pane.id] === "loading" && <div className="pane-status">加载中...</div>}
-                {pane.url && paneStatuses[pane.id] === "failed" && (
+                {pane.url && !isInternalNmcUrl(pane.url) && paneStatuses[pane.id] === "loading" && <div className="pane-status">加载中...</div>}
+                {pane.url && !isInternalNmcUrl(pane.url) && paneStatuses[pane.id] === "failed" && (
                   <div className="pane-error">
                     <strong>页面加载失败</strong>
                     <button onClick={() => refreshPane(pane.id)}>重试</button>
@@ -1087,6 +1112,155 @@ function App() {
   );
 }
 
+function NmcWeatherChartPanel({ paneUrl, refreshToken }: { paneUrl: string; refreshToken: number }) {
+  const [data, setData] = useState<NmcChartResponse | null>(null);
+  const [selectedLevelId, setSelectedLevelId] = useState(() => getNmcLevelFromUrl(paneUrl));
+  const [selectedChartIndex, setSelectedChartIndex] = useState(0);
+  const [zoom, setZoom] = useState(100);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    void loadCharts(refreshToken > 0);
+  }, [refreshToken]);
+
+  useEffect(() => {
+    setSelectedLevelId(getNmcLevelFromUrl(paneUrl));
+    setSelectedChartIndex(0);
+  }, [paneUrl]);
+
+  async function loadCharts(force = false) {
+    if (!window.typhoonApi?.getNmcCharts) {
+      setError("当前运行环境不支持 NMC 天气图抓取，请用桌面程序打开。");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      const response = await window.typhoonApi.getNmcCharts({ force });
+      setData(response);
+      const levelIds = Object.keys(response.levels);
+      if (!response.levels[selectedLevelId] && levelIds.length > 0) {
+        setSelectedLevelId(levelIds[0]);
+      }
+      setSelectedChartIndex(0);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "NMC 天气图更新失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const levels = data ? Object.values(data.levels) : [];
+  const selectedLevel = data?.levels[selectedLevelId] ?? levels[0];
+  const charts = selectedLevel?.charts ?? [];
+  const selectedChart = charts[Math.min(selectedChartIndex, Math.max(charts.length - 1, 0))];
+  const fetchedAt = data ? new Date(data.fetchedAt).toLocaleString("zh-CN", { hour12: false }) : "尚未更新";
+  const imageStyle = zoom === 100 ? undefined : { width: `${zoom}%`, maxWidth: "none" };
+  const imageOnly = /[?&]level=/i.test(paneUrl);
+
+  if (imageOnly) {
+    return (
+      <div className="nmc-image-only">
+        {loading && !selectedChart && <div className="nmc-floating-message">正在抓取最新 NMC 天气图...</div>}
+        {error && <div className="nmc-floating-message is-error">{error}</div>}
+        {data?.warning && <div className="nmc-floating-message is-warning">{data.warning}</div>}
+        {selectedChart && (
+          <img
+            src={selectedChart.fileUrl}
+            alt={`${selectedLevel?.label ?? "NMC"} ${selectedChart.time}`}
+            style={imageStyle}
+            onDoubleClick={() => setZoom((current) => (current === 100 ? 160 : 100))}
+          />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="nmc-panel">
+      <div className="nmc-head">
+        <div>
+          <strong>NMC 天气图索引</strong>
+          <span>自动缓存最新 3 张，2 小时内优先使用本地图片</span>
+        </div>
+        <button onClick={() => loadCharts(true)} disabled={loading}>
+          <RefreshCcw size={15} />
+          {loading ? "更新中" : "强制更新"}
+        </button>
+      </div>
+
+      <div className="nmc-toolbar">
+        <div className="nmc-levels">
+          {levels.map((level) => (
+            <button
+              className={level.id === selectedLevel?.id ? "is-active" : ""}
+              key={level.id}
+              onClick={() => {
+                setSelectedLevelId(level.id);
+                setSelectedChartIndex(0);
+              }}
+            >
+              {level.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="nmc-tools">
+          <button onClick={() => setZoom((current) => Math.max(60, current - 20))} title="缩小">
+            <ZoomOut size={15} />
+          </button>
+          <button onClick={() => setZoom(100)}>适应</button>
+          <button onClick={() => setZoom((current) => Math.min(220, current + 20))} title="放大">
+            <ZoomIn size={15} />
+          </button>
+          {selectedLevel && (
+            <button onClick={() => window.open(selectedLevel.pageUrl, "_blank", "noopener,noreferrer")}>
+              原网页
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="nmc-times">
+        {charts.map((chart, index) => (
+          <button
+            className={index === selectedChartIndex ? "is-active" : ""}
+            key={`${chart.time}-${index}`}
+            onClick={() => setSelectedChartIndex(index)}
+          >
+            {index === 0 ? "最新" : `前 ${index}`}
+            <span>{chart.time}</span>
+          </button>
+        ))}
+      </div>
+
+      {data?.warning && <div className="nmc-warning">{data.warning}</div>}
+      {error && <div className="nmc-error">{error}</div>}
+
+      <div className="nmc-image-stage">
+        {loading && !selectedChart && <div className="nmc-placeholder">正在抓取中央气象台天气图...</div>}
+        {!loading && !selectedChart && !error && <div className="nmc-placeholder">暂无天气图缓存，点击强制更新重试。</div>}
+        {selectedChart && (
+          <img
+            src={selectedChart.fileUrl}
+            alt={`${selectedLevel?.label ?? "NMC"} ${selectedChart.time}`}
+            style={imageStyle}
+            onDoubleClick={() => setZoom((current) => (current === 100 ? 160 : 100))}
+          />
+        )}
+      </div>
+
+      <div className="nmc-foot">
+        <span>上次更新：{fetchedAt}</span>
+        <span>{data?.cacheHit ? "使用缓存" : "刚刚更新"}</span>
+        {selectedChart && <span>来源：中央气象台</span>}
+      </div>
+    </div>
+  );
+}
+
 function layoutLabel(layout: LayoutMode) {
   const labels: Record<LayoutMode, string> = {
     one: "单屏",
@@ -1095,6 +1269,19 @@ function layoutLabel(layout: LayoutMode) {
     four: "四屏"
   };
   return labels[layout];
+}
+
+function isInternalNmcUrl(url: string | undefined) {
+  return Boolean(url?.startsWith(internalNmcUrl));
+}
+
+function getNmcLevelFromUrl(url: string) {
+  const match = url.match(/level=([a-z0-9]+)/i) ?? url.match(/nmc-weather-charts\/([a-z0-9]+)/i);
+  return match?.[1] ?? "h500";
+}
+
+function migrateNmcUrl(url: string) {
+  return nmcUrlMap[url] ?? url;
 }
 
 function layoutSize(layout: LayoutMode) {
@@ -1130,7 +1317,7 @@ function normalizePanes(panes: PaneState[] | undefined): PaneState[] {
     return {
       id,
       title: existing?.title || "空白窗格",
-      url: existing?.url || ""
+      url: migrateNmcUrl(existing?.url || "")
     };
   });
 }
@@ -1140,12 +1327,19 @@ function normalizeWorkspaces(workspaces: Workspace[] | undefined): Workspace[] {
     return defaultWorkspaces;
   }
 
-  const normalized = workspaces.map((workspace) => ({
-    id: workspace.id || `workspace-${Date.now()}`,
-    name: workspace.name || "未命名快捷模式",
-    layout: normalizeLayout(workspace.layout),
-    panes: normalizePanes(workspace.panes)
-  }));
+  const normalized = workspaces.map((workspace) => {
+    const defaultWorkspace = defaultWorkspaces.find((item) => item.id === workspace.id);
+    if (workspace.id === "nmc-weather-charts" && defaultWorkspace) {
+      return defaultWorkspace;
+    }
+
+    return {
+      id: workspace.id || `workspace-${Date.now()}`,
+      name: workspace.name || "未命名快捷模式",
+      layout: normalizeLayout(workspace.layout),
+      panes: normalizePanes(workspace.panes)
+    };
+  });
 
   const existingIds = new Set(normalized.map((workspace) => workspace.id));
   const missingDefaults = defaultWorkspaces.filter((workspace) => !existingIds.has(workspace.id));
